@@ -1,0 +1,90 @@
+---
+title: "Lab_5"
+author: "Movrenko Anna"
+date: '14 апреля 2020 г '
+output:
+  html_document:
+    self_contained: yes
+    css: style.css
+---
+ Создать .Rmd скрипт, который генерирует html-отчёт с двумя картами: 
+1. Картограмма с таблицей стран мира по показателю из базы Всемирного банка 
+(интерактивная картограмма из примера). 
+2. Карта с маркерами или с радиусами, построенная по набору данных с Портала 
+открытых данных РФ. 
+
+```{r setup, warning = F, message = F}
+# загрузка пакетов
+library('data.table')
+library('WDI')
+library('leaflet')
+suppressPackageStartupMessages(library('googleVis'))
+```
+
+
+## Интерактивная картограмма  
+
+Интерактивная картограмма на данных Всемирного Банка по [показатель из раздела “Economy & Growth”  (Экономика и рост)] (https://data.worldbank.org/indicator/NE.EXP.GNFS.ZS?view=chart) за 2018 год.  
+Exports of goods and services (% of GDP)
+
+```{r Интерактивная картограмма, results = 'asis', cashe = T}
+# данные по Exports of goods and services (% of GDP)
+indicator.code <- 'NE.EXP.GNFS.ZS'
+DT <- data.table(WDI(indicator = indicator.code, start = 2018, end = 2018))
+
+# все коды стран iso2
+fileURL <- 'https://pkgstore.datahub.io/core/country-list/data_csv/data/d7c9d7cfb42cb69f4422dec222dbbaa8/data_csv.csv'
+all.iso2.country.codes <- read.csv(fileURL, stringsAsFactors = F, 
+                                   na.strings = '.')
+
+# убираем макрорегионы
+ 
+DT <- na.omit(DT[iso2c %in% all.iso2.country.codes$Code, ])
+
+# объект: таблица исходных данных
+g.tbl <- gvisTable(data = DT[, -'year'], 
+                   options = list(width = 300, height = 400))
+# объект: интерактивная карта
+g.chart <- gvisGeoChart(data = DT, 
+                        locationvar = 'iso2c', 
+                        hovervar = 'country',
+                        colorvar = indicator.code, 
+                        options = list(width = 500, 
+                                       height = 400, 
+                                       dataMode = 'regions'))
+# размещаем таблицу и карту на одной панели (слева направо)
+TG <- gvisMerge(g.tbl, g.chart, 
+                horizontal = TRUE, 
+                tableOptions = 'bgcolor=\"#CCCCCC\" cellspacing=10')
+
+# вставляем результат в html-документ
+TG
+```
+## Карты на основе leaflet    
+
+На этой карте показано расположение МФЦ по Москве Центральный административный округ. Список получен с Портала открытых данных РФ, географические координаты определены по адресам с помощью API Яндекс Геокодера. 
+```{r Карта с маркерами на основе leaflet, results = 'asis', message = F}
+# картинка-логотип для маркеров объекта
+fileURL <- 'https://github.com/aksyuk/R-data/raw/master/pics/pharmacy-icon.png'
+pharm.icon <- makeIcon(iconUrl = fileURL, 
+                       iconWidth = 31,
+                       iconHeight = 31,
+                       iconAnchorX = 31,
+                       iconAnchorY = 31)
+
+DT.loc <- read.csv2('./data/MFC.csv',stringsAsFactors = FALSE)
+DT.loc$lat <- as.numeric(DT.loc$lat)
+DT.loc$long <- as.numeric(DT.loc$long)
+
+# подписи к объектам с гиперссылками
+map.sites <- paste0(DT.loc$Наименование.объекта, '</br>',
+                    DT.loc$Режим.работы, '</br>',
+                    '<em>', DT.loc$Контактный.телефон, '</em>')
+
+# создаём виджет с картой
+myMap <- DT.loc %>% leaflet(width = 800, height = 800) %>% 
+addTiles() %>% addMarkers(icon = pharm.icon, popup = map.sites)
+
+# рисуем карту
+myMap
+```
